@@ -308,7 +308,7 @@ export function PhysicianDashboard() {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl">CervicalScreen - Clinician Dashboard</h1>
+            <h1 className="text-2xl">CerviScreen - Clinician Dashboard</h1>
             <p className="text-sm text-gray-600">Dr. {userName}</p>
           </div>
           <div className="flex items-center gap-3">

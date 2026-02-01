@@ -631,7 +631,7 @@ export function PatientDashboard() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl">CervicalScreen Patient Portal</h1>
+              <h1 className="text-2xl">CerviScreen Patient Portal</h1>
               <p className="text-sm text-gray-600">Welcome, {userName}</p>
             </div>
             <div className="flex items-center gap-3">
@@ -896,7 +896,7 @@ export function PatientDashboard() {
             <div>
               <p className="font-medium mb-1">📱 Technical Support</p>
               <p className="text-gray-600">Call: 1-800-SCREEN</p>
-              <p className="text-gray-600">Email: support@cervicalscreen.com</p>
+              <p className="text-gray-600">Email: support@cerviscreen.com</p>
             </div>
             <div>
               <p className="font-medium mb-1">🏥 Clinical Questions</p>
