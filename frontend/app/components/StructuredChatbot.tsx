@@ -10,6 +10,8 @@ interface Message {
   text: string;
   type: 'bot' | 'user' | 'question';
   timestamp: Date;
+  questionNumber?: number;
+  totalQuestions?: number;
 }
 
 interface QuestionAnswer {
@@ -117,6 +119,8 @@ export function StructuredChatbot({ onComplete }: StructuredChatbotProps) {
   const [currentAnswer, setCurrentAnswer] = useState<string | string[]>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const questionAddedRef = useRef<Set<number>>(new Set());
+  const [displayedQuestionNumber, setDisplayedQuestionNumber] = useState(1);
+  const [totalQuestions, setTotalQuestions] = useState(questions.length); // Start with 8
 
   const currentQuestion = questions[currentQuestionIndex];
   const isComplete = currentQuestionIndex >= questions.length;
@@ -135,10 +139,11 @@ export function StructuredChatbot({ onComplete }: StructuredChatbotProps) {
           text: currentQuestion.text,
           type: 'question',
           timestamp: new Date(),
+          questionNumber: displayedQuestionNumber, // Store the current display number
         }]);
       }, 500);
     }
-  }, [currentQuestionIndex, isComplete, currentQuestion.text]);
+  }, [currentQuestionIndex, isComplete, currentQuestion.text, displayedQuestionNumber]);
 
   const handleAnswer = () => {
     if (currentQuestion.required && !currentAnswer) {
@@ -171,9 +176,26 @@ export function StructuredChatbot({ onComplete }: StructuredChatbotProps) {
       // Reset current answer
       setCurrentAnswer('');
 
+      // Conditional logic: Skip question 4 if question 3 (previous-screening) is "No"
+      let nextQuestionIndex = currentQuestionIndex + 1;
+      let isSkippingQuestion = false;
+      
+      // Question 3 is at index 2 (previous-screening)
+      // Question 4 is at index 3 (previous-abnormal)
+      if (currentQuestion.id === 'previous-screening' && currentAnswer === 'No') {
+        // Skip question 4 (previous-abnormal) and go to question 5 (hpv-vaccine)
+        nextQuestionIndex = currentQuestionIndex + 2;
+        isSkippingQuestion = true;
+        // Update total to reflect that we're skipping one question
+        setTotalQuestions(questions.length - 1); // 7 instead of 8
+      }
+
+      // Increment displayed question number (only increment by 1 even if skipping internal index)
+      setDisplayedQuestionNumber(prev => prev + 1);
+
       // Move to next question
-      if (currentQuestionIndex < questions.length - 1) {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
+      if (nextQuestionIndex < questions.length) {
+        setCurrentQuestionIndex(nextQuestionIndex);
       } else {
         // All questions answered
         const allAnswers = [...answers, answer];
@@ -289,7 +311,7 @@ export function StructuredChatbot({ onComplete }: StructuredChatbotProps) {
                 <div className="flex items-center gap-2 mb-2">
                   <MessageSquare className="w-4 h-4 text-purple-600" />
                   <span className="text-xs font-medium text-purple-600">
-                    Question {currentQuestionIndex + 1} of {questions.length}
+                    Question {message.questionNumber} of {totalQuestions}
                   </span>
                 </div>
               )}

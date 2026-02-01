@@ -38,7 +38,7 @@ export function DevicePairing({ open, onClose, onPairingComplete }: DevicePairin
       title: 'Pair the Device',
       icon: Wifi,
       instructions: [
-        'Look for "CervicalScreen-XXXX" in your available Bluetooth devices',
+        'Look for "CerviScreen-XXXX" in your available Bluetooth devices',
         'Tap on the device name to initiate pairing',
         'If prompted for a PIN, enter: 0000',
         'Wait for the confirmation message and the device LED to turn solid green',
@@ -220,7 +220,7 @@ export function DevicePairing({ open, onClose, onPairingComplete }: DevicePairin
           {/* Help text */}
           <div className="bg-gray-50 rounded-lg p-4 text-center">
             <p className="text-sm text-gray-600">
-              Need help? Contact support at <span className="text-blue-600 font-medium">support@cervicalscreen.com</span> or call <span className="text-blue-600 font-medium">1-800-SCREEN</span>
+              Need help? Contact support at <span className="text-blue-600 font-medium">support@cerviscreen.com</span> or call <span className="text-blue-600 font-medium">1-800-SCREEN</span>
             </p>
           </div>
         </div>

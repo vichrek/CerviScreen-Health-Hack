@@ -68,14 +68,14 @@ export function ConsentEligibility({ onComplete }: ConsentEligibilityProps) {
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
                   <CheckCircle2 className="w-8 h-8 text-blue-600" />
                 </div>
-                <h1 className="text-3xl mb-2">Welcome to CervicalScreen</h1>
+                <h1 className="text-3xl mb-2">Welcome to CerviScreen</h1>
                 <p className="text-gray-600">At-Home Cervical Screening Service</p>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
                 <h2 className="text-lg mb-3">What is this service?</h2>
                 <p className="text-sm text-gray-700 mb-4">
-                  CervicalScreen enables you to perform cervical screening from the comfort of your home using a specialized imaging device. Your images and information will be securely transmitted to healthcare professionals for review and triage.
+                  CerviScreen enables you to perform cervical screening from the comfort of your home using a specialized imaging device. Your images and information will be securely transmitted to healthcare professionals for review and triage.
                 </p>
                 <ul className="space-y-2 text-sm text-gray-700">
                   <li className="flex items-start gap-2">

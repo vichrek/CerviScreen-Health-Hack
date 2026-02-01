@@ -334,7 +334,7 @@ export function NotificationDetail() {
           </p>
           <div className="text-sm text-orange-700">
             <p><strong>Support:</strong> 1-800-SCREEN</p>
-            <p><strong>Email:</strong> support@cervicalscreen.com</p>
+            <p><strong>Email:</strong> support@cerviscreen.com</p>
           </div>
         </div>
       </div>

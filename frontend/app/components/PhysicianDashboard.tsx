@@ -16,6 +16,14 @@ interface PatientSubmission {
   questionnaireAnswers?: any[];
   imageQualityScore?: number;
   triageFlags?: string[];
+  status?: string;
+  submissionId?: string;
+  submissionImages?: Array<{
+    fileName: string;
+    preview: string;
+    qualityScore: number;
+    qualityFeedback: string;
+  }>;
 }
 
 interface MedicalImage {
@@ -79,7 +87,7 @@ export function PhysicianDashboard() {
       const { data: { user } } = await supabase.auth.getUser(accessToken);
       if (!user) return;
 
-      // Fetch submissions assigned to this physician
+      // Fetch all submissions assigned to this physician
       const { data: submissions, error: submissionsError } = await supabase
         .from('screening_submissions')
         .select('*')
@@ -91,7 +99,7 @@ export function PhysicianDashboard() {
       }
 
       if (submissions && submissions.length > 0) {
-        // Transform to match the interface
+        // Transform to match the interface, including images with each submission
         const transformedSubmissions: PatientSubmission[] = submissions.map(sub => ({
           patientId: sub.patient_id,
           patientName: sub.patient_name,
@@ -103,23 +111,32 @@ export function PhysicianDashboard() {
           imageQualityScore: sub.images?.[0]?.qualityScore || 0,
           triageFlags: sub.images?.some((img: any) => img.qualityScore < 75) 
             ? ['Low image quality detected'] 
-            : []
+            : [],
+          status: sub.status,
+          submissionId: sub.id,
+          // Include images directly with this submission
+          submissionImages: sub.images ? sub.images.map((img: any) => ({
+            fileName: img.fileName,
+            preview: img.preview,
+            qualityScore: img.qualityScore,
+            qualityFeedback: img.qualityFeedback
+          })) : []
         }));
 
         setSubmissions(transformedSubmissions);
 
-        // Transform images with preview URLs
+        // Keep images array for the gallery view (all images combined)
         const allImages: MedicalImage[] = [];
         submissions.forEach(sub => {
           if (sub.images && Array.isArray(sub.images)) {
-            sub.images.forEach((img: any, idx: number) => {
+            sub.images.forEach((img: any) => {
               allImages.push({
                 patientId: sub.patient_id,
                 patientName: sub.patient_name,
                 fileName: img.fileName,
                 originalName: img.fileName,
                 uploadedAt: sub.submitted_at,
-                url: img.preview || null, // Use the base64 preview
+                url: img.preview || null,
                 qualityScore: img.qualityScore
               });
             });
@@ -280,7 +297,9 @@ export function PhysicianDashboard() {
   });
 
   // Calculate statistics
-  const highPriorityCount = submissions.filter(s => s.triageFlags && s.triageFlags.length > 0).length;
+  const pendingSubmissions = submissions.filter(s => s.status === 'pending_review');
+  const reviewedSubmissions = submissions.filter(s => s.status === 'reviewed');
+  const highPriorityCount = pendingSubmissions.filter(s => s.triageFlags && s.triageFlags.length > 0).length;
   const lowQualityImages = images.filter(img => img.qualityScore && img.qualityScore < 75).length;
 
   return (
@@ -292,13 +311,22 @@ export function PhysicianDashboard() {
             <h1 className="text-2xl">CervicalScreen - Clinician Dashboard</h1>
             <p className="text-sm text-gray-600">Dr. {userName}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/physician-profile')}
+              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <User className="w-4 h-4" />
+              Profile
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -319,7 +347,7 @@ export function PhysicianDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">New Submissions</p>
-                <p className="text-3xl mt-1">{submissions.length}</p>
+                <p className="text-3xl mt-1">{pendingSubmissions.length}</p>
               </div>
               <MessageSquare className="w-10 h-10 text-green-500" />
             </div>
@@ -387,6 +415,8 @@ export function PhysicianDashboard() {
                 </div>
               ) : (
                 Array.from(patientData.entries()).map(([patientId, data]) => {
+                  const pendingSubs = data.submissions.filter(s => s.status === 'pending_review');
+                  const reviewedSubs = data.submissions.filter(s => s.status === 'reviewed');
                   const latestSubmission = data.submissions[0];
                   const hasTriageFlags = latestSubmission?.triageFlags && latestSubmission.triageFlags.length > 0;
                   const avgQuality = data.images.length > 0 
@@ -406,16 +436,22 @@ export function PhysicianDashboard() {
                             <User className={`w-5 h-5 ${hasTriageFlags ? 'text-orange-600' : 'text-blue-600'}`} />
                           </div>
                           <div className="flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-medium">{data.submissions[0]?.patientName || data.images[0]?.patientName || 'Unknown Patient'}</p>
                               {hasTriageFlags && (
                                 <span className="px-2 py-0.5 bg-orange-200 text-orange-800 text-xs rounded-full">
                                   Priority
                                 </span>
                               )}
+                              {pendingSubs.length > 0 && (
+                                <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full font-medium">
+                                  {pendingSubs.length} New
+                                </span>
+                              )}
                             </div>
                             <p className="text-sm text-gray-600">
-                              {data.submissions.length} submission{data.submissions.length !== 1 ? 's' : ''}, {data.images.length} image{data.images.length !== 1 ? 's' : ''}
+                              Total: {data.submissions.length} submission{data.submissions.length !== 1 ? 's' : ''}
+                              {reviewedSubs.length > 0 && ` (${reviewedSubs.length} reviewed)`}
                               {avgQuality && ` • Quality: ${avgQuality}%`}
                             </p>
                           </div>
@@ -463,90 +499,174 @@ export function PhysicianDashboard() {
                             </div>
                           )}
 
-                          {/* Submissions */}
-                          {data.submissions.map((submission, idx) => (
-                            <div key={idx} className="bg-gray-50 p-3 rounded border">
-                              <div className="flex items-center gap-2 text-sm mb-2">
-                                <Calendar className="w-4 h-4 text-gray-500" />
-                                <span className="text-gray-600">
-                                  {new Date(submission.timestamp).toLocaleString()}
-                                </span>
+                          {/* Submissions - Separated by Status */}
+                          {pendingSubs.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded px-3 py-1">
+                                <FileCheck className="w-4 h-4 text-green-600" />
+                                <h4 className="text-sm font-semibold text-green-900">
+                                  Pending Review ({pendingSubs.length})
+                                </h4>
                               </div>
-                              
-                              {/* Questionnaire Answers */}
-                              {submission.questionnaireAnswers && submission.questionnaireAnswers.length > 0 && (
-                                <div className="space-y-2 mb-3">
-                                  <p className="text-sm font-medium text-gray-700">Questionnaire Responses:</p>
-                                  <div className="bg-white p-3 rounded border space-y-2">
-                                    {submission.questionnaireAnswers.map((qa: any, qaIdx: number) => (
-                                      <div key={qaIdx} className="text-sm">
-                                        <p className="font-medium text-gray-700">{qa.question}</p>
-                                        <p className="text-gray-600 ml-2">
-                                          {Array.isArray(qa.answer) ? qa.answer.join(', ') : qa.answer}
-                                        </p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              {submission.messages && submission.messages.length > 0 && (
-                                <div className="space-y-1">
-                                  <p className="text-sm font-medium text-gray-700">Notes:</p>
-                                  {submission.messages.slice(0, 3).map((msg, msgIdx) => (
-                                    <div key={msgIdx} className="text-sm bg-white p-2 rounded">
-                                      {msg.text}
+                              {pendingSubs.map((submission, idx) => (
+                                <div key={submission.submissionId || idx} className="bg-green-50 p-3 rounded border border-green-200">
+                                  <div className="flex items-center justify-between gap-2 text-sm mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="w-4 h-4 text-gray-500" />
+                                      <span className="text-gray-600">
+                                        {new Date(submission.timestamp).toLocaleString()}
+                                      </span>
                                     </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          
-                          {/* Images */}
-                          {data.images.length > 0 && (
-                            <div>
-                              <p className="text-sm font-medium mb-2">Medical Images ({data.images.length}):</p>
-                              <div className="grid grid-cols-2 gap-2">
-                                {data.images.slice(0, 4).map((img, idx) => (
-                                  <div key={idx} className="relative">
-                                    {img.url ? (
-                                      <div className="relative">
-                                        <img 
-                                          src={img.url} 
-                                          alt={img.originalName}
-                                          className="w-full h-24 object-cover rounded border"
-                                        />
-                                        {img.qualityScore && (
-                                          <div className="absolute top-1 right-1 px-2 py-0.5 bg-black/70 text-white text-xs rounded">
-                                            {img.qualityScore}%
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div className="w-full h-24 bg-gray-200 rounded border flex items-center justify-center">
-                                        <ImageIcon className="w-6 h-6 text-gray-400" />
-                                      </div>
-                                    )}
+                                    <span className="px-2 py-0.5 bg-green-200 text-green-800 text-xs rounded-full font-medium">
+                                      NEW
+                                    </span>
                                   </div>
-                                ))}
-                              </div>
+                                  
+                                  {/* Questionnaire Answers */}
+                                  {submission.questionnaireAnswers && submission.questionnaireAnswers.length > 0 && (
+                                    <div className="space-y-2 mb-3">
+                                      <p className="text-sm font-medium text-gray-700">Questionnaire Responses:</p>
+                                      <div className="bg-white p-3 rounded border space-y-2">
+                                        {submission.questionnaireAnswers.map((qa: any, qaIdx: number) => (
+                                          <div key={qaIdx} className="text-sm">
+                                            <p className="font-medium text-gray-700">{qa.question}</p>
+                                            <p className="text-gray-600 ml-2">
+                                              {Array.isArray(qa.answer) ? qa.answer.join(', ') : qa.answer}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Images for this Submission */}
+                                  {submission.submissionImages && submission.submissionImages.length > 0 && (
+                                    <div className="space-y-2 mb-3">
+                                      <p className="text-sm font-medium text-gray-700">
+                                        Submitted Images ({submission.submissionImages.length}):
+                                      </p>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {submission.submissionImages.map((img, imgIdx) => (
+                                          <div key={imgIdx} className="relative">
+                                            <div className="relative">
+                                              <img 
+                                                src={img.preview} 
+                                                alt={img.fileName}
+                                                className="w-full h-32 object-cover rounded border"
+                                              />
+                                              {img.qualityScore && (
+                                                <div className="absolute top-1 right-1 px-2 py-0.5 bg-black/70 text-white text-xs rounded">
+                                                  {img.qualityScore}%
+                                                </div>
+                                              )}
+                                            </div>
+                                            <p className="text-xs text-gray-600 mt-1 truncate">{img.fileName}</p>
+                                            {img.qualityFeedback && (
+                                              <p className="text-xs text-gray-500">{img.qualityFeedback}</p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Make Decision Button for Pending */}
+                                  <button
+                                    onClick={() => handleMakeDecision(
+                                      patientId,
+                                      submission.patientName,
+                                      submission.imageQualityScore,
+                                      submission.triageFlags
+                                    )}
+                                    className="w-full mt-2 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                                  >
+                                    <ClipboardCheck className="w-4 h-4" />
+                                    Make Clinical Decision
+                                  </button>
+                                </div>
+                              ))}
                             </div>
                           )}
 
-                          {/* Make Decision Button */}
-                          <button
-                            onClick={() => handleMakeDecision(
-                              patientId,
-                              data.submissions[0]?.patientName || data.images[0]?.patientName || 'Unknown Patient',
-                              latestSubmission?.imageQualityScore,
-                              latestSubmission?.triageFlags
-                            )}
-                            className="w-full py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all flex items-center justify-center gap-2"
-                          >
-                            <FileCheck className="w-4 h-4" />
-                            Make Clinical Decision
-                          </button>
+                          {reviewedSubs.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded px-3 py-1">
+                                <FileCheck className="w-4 h-4 text-gray-600" />
+                                <h4 className="text-sm font-semibold text-gray-700">
+                                  Previously Reviewed ({reviewedSubs.length})
+                                </h4>
+                              </div>
+                              {reviewedSubs.map((submission, idx) => (
+                                <div key={submission.submissionId || idx} className="bg-gray-50 p-3 rounded border">
+                                  <div className="flex items-center justify-between gap-2 text-sm mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <Calendar className="w-4 h-4 text-gray-500" />
+                                      <span className="text-gray-600">
+                                        {new Date(submission.timestamp).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-xs rounded-full">
+                                      REVIEWED
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Questionnaire Answers */}
+                                  {submission.questionnaireAnswers && submission.questionnaireAnswers.length > 0 && (
+                                    <div className="space-y-2 mb-3">
+                                      <p className="text-sm font-medium text-gray-700">Questionnaire Responses:</p>
+                                      <div className="bg-white p-3 rounded border space-y-2">
+                                        {submission.questionnaireAnswers.slice(0, 3).map((qa: any, qaIdx: number) => (
+                                          <div key={qaIdx} className="text-sm">
+                                            <p className="font-medium text-gray-700">{qa.question}</p>
+                                            <p className="text-gray-600 ml-2">
+                                              {Array.isArray(qa.answer) ? qa.answer.join(', ') : qa.answer}
+                                            </p>
+                                          </div>
+                                        ))}
+                                        {submission.questionnaireAnswers.length > 3 && (
+                                          <p className="text-xs text-gray-500 italic">
+                                            +{submission.questionnaireAnswers.length - 3} more responses
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Images for this Submission */}
+                                  {submission.submissionImages && submission.submissionImages.length > 0 && (
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium text-gray-700">
+                                        Images ({submission.submissionImages.length}):
+                                      </p>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {submission.submissionImages.slice(0, 2).map((img, imgIdx) => (
+                                          <div key={imgIdx} className="relative">
+                                            <div className="relative">
+                                              <img 
+                                                src={img.preview} 
+                                                alt={img.fileName}
+                                                className="w-full h-24 object-cover rounded border"
+                                              />
+                                              {img.qualityScore && (
+                                                <div className="absolute top-1 right-1 px-2 py-0.5 bg-black/70 text-white text-xs rounded">
+                                                  {img.qualityScore}%
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      {submission.submissionImages.length > 2 && (
+                                        <p className="text-xs text-gray-500 italic">
+                                          +{submission.submissionImages.length - 2} more images
+                                        </p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
