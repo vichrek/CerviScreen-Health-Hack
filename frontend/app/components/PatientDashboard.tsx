@@ -334,43 +334,79 @@ export function PatientDashboard() {
     }
 
     try {
+      console.log('Starting submission process with', uploadedImages.length, 'images');
+      
+      // Call predict endpoint for each image
+      const predictedImages = await Promise.all(
+        uploadedImages.map(async (img) => {
+          const formData = new FormData();
+          formData.append('file', img.file);
+
+          try {
+            console.log('Calling /predict for image:', img.file.name);
+            const response = await fetch('http://localhost:8000/predict', {
+              method: 'POST',
+              body: formData,
+            });
+
+            if (!response.ok) {
+              throw new Error(`Prediction failed with status ${response.status}`);
+            }
+
+            const prediction = await response.json();
+            console.log('Prediction received for', img.file.name, ':', prediction);
+            
+            return {
+              ...img,
+              prediction, // Add prediction results
+            };
+          } catch (err) {
+            console.error('Prediction error for image:', img.file.name, err);
+            toast.warning(`Prediction failed for ${img.file.name}, but submission will continue.`);
+            return img; // Continue without prediction if it fails
+          }
+        })
+      );
+
+      console.log('All predictions completed:', predictedImages);
+
       const { data: { user } } = await supabase.auth.getUser(accessToken);
       if (user) {
-        // Prepare submission data with base64 images
         const submissionTimestamp = new Date().toISOString();
         const submission = {
           patient_id: user.id,
           physician_id: selectedPhysicianId,
           patient_name: userName,
           questionnaire_answers: questionnaireAnswers,
-          image_count: uploadedImages.length,
-          images: uploadedImages.map(img => ({
+          image_count: predictedImages.length,
+          images: predictedImages.map(img => ({
             fileName: img.file.name,
             fileSize: img.file.size,
             qualityScore: img.qualityScore,
             qualityFeedback: img.qualityFeedback,
-            preview: img.preview // Store base64 image data
+            preview: img.preview,
+            prediction: img.prediction || null, // Include prediction results
           })),
           status: 'pending_review',
           submitted_at: submissionTimestamp
         };
-        
+
+        console.log('Final submission data:', submission);
+
         // Save to Supabase
         const { data: submittedData, error } = await supabase
           .from('screening_submissions')
           .insert(submission)
           .select()
           .single();
-        
+
         if (error) throw error;
-        
-        // Store with timestamp for local use
+
         const submissionWithTimestamp = {
           ...submission,
           timestamp: submissionTimestamp
         };
-        
-        // Also store locally for backup and PDF generation
+
         localStorage.setItem(`submission_${user.id}_${Date.now()}`, JSON.stringify(submissionWithTimestamp));
         setLastSubmission(submissionWithTimestamp);
       }
@@ -379,19 +415,16 @@ export function PatientDashboard() {
         duration: 8000,
       });
       setIsSubmitted(true);
-      
-      // Show download dialog after a brief delay
+
       setTimeout(() => {
         setShowDownloadDialog(true);
       }, 1000);
-      
-      // Keep the data for download, don't reset immediately
+
     } catch (err) {
       console.error('Submit error:', err);
       toast.error('Failed to submit: ' + (err as Error).message);
     }
   };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem('accessToken');

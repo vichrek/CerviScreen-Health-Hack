@@ -24,6 +24,11 @@ interface PatientSubmission {
     preview: string;
     qualityScore: number;
     qualityFeedback: string;
+    prediction?: {
+      label: string;
+      prob_abnormal: number;
+      threshold: number;
+    };
   }>;
 }
 
@@ -53,6 +58,10 @@ export function PhysicianDashboard() {
   const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
   
+  // Backend health check state
+  const [backendHealth, setBackendHealth] = useState<'healthy' | 'unhealthy' | 'checking'>('checking');
+  const [debugInfo, setDebugInfo] = useState<string>('');
+  
   // Clinical decision dialog state
   const [showDecisionDialog, setShowDecisionDialog] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<{
@@ -77,11 +86,31 @@ export function PhysicianDashboard() {
         setUserName(user.user_metadata.name || user.email || 'Physician');
       }
 
+      // Check backend health
+      await checkBackendHealth();
+      
       await fetchData(accessToken);
     };
 
     checkAuth();
   }, [navigate]);
+
+  const checkBackendHealth = async () => {
+    try {
+      setBackendHealth('checking');
+      const response = await fetch('http://localhost:8000/health');
+      if (response.ok) {
+        setBackendHealth('healthy');
+        setDebugInfo('Backend is running and responding correctly');
+      } else {
+        setBackendHealth('unhealthy');
+        setDebugInfo(`Backend returned status: ${response.status}`);
+      }
+    } catch (error) {
+      setBackendHealth('unhealthy');
+      setDebugInfo(`Backend connection failed: ${(error as Error).message}`);
+    }
+  };
 
   const fetchData = async (accessToken: string) => {
     try {
@@ -101,30 +130,61 @@ export function PhysicianDashboard() {
 
       if (submissions && submissions.length > 0) {
         // Transform to match the interface, including images with each submission
-        const transformedSubmissions: PatientSubmission[] = submissions.map(sub => ({
-          patientId: sub.patient_id,
-          patientName: sub.patient_name,
-          messages: [
-            { text: `Submitted ${sub.image_count} images`, timestamp: new Date(sub.submitted_at) }
-          ],
-          timestamp: sub.submitted_at,
-          questionnaireAnswers: sub.questionnaire_answers,
-          imageQualityScore: sub.images?.[0]?.qualityScore || 0,
-          triageFlags: sub.images?.some((img: any) => img.qualityScore < 75) 
-            ? ['Low image quality detected'] 
-            : [],
-          status: sub.status,
-          submissionId: sub.id,
-          // Include images directly with this submission
-          submissionImages: sub.images ? sub.images.map((img: any) => ({
-            fileName: img.fileName,
-            preview: img.preview,
-            qualityScore: img.qualityScore,
-            qualityFeedback: img.qualityFeedback
-          })) : []
-        }));
+        const transformedSubmissions: PatientSubmission[] = submissions.map(sub => {
+          // Debug log for each submission
+          console.log('Submission:', {
+            patient: sub.patient_name,
+            images: sub.images?.length,
+            hasImages: !!sub.images,
+            imagesData: sub.images
+          });
 
+          // Extract triage flags from predictions
+          const triageFlags: string[] = [];
+          
+          // Check for quality issues
+          if (sub.images?.some((img: any) => img.qualityScore < 75)) {
+            triageFlags.push('Low image quality detected');
+          }
+          
+          // Check for abnormality predictions
+          if (sub.images?.some((img: any) => img.prediction?.prob_abnormal > 0.7)) {
+            triageFlags.push('⚠️ High abnormality risk detected');
+          } else if (sub.images?.some((img: any) => img.prediction?.prob_abnormal > 0.5)) {
+            triageFlags.push('⚠️ Moderate abnormality risk');
+          }
+          
+          // Check for abnormal classifications
+          if (sub.images?.some((img: any) => img.prediction?.label === 'abnormal')) {
+            triageFlags.push('🔴 Abnormal classification detected');
+          }
+
+          return {
+            patientId: sub.patient_id,
+            patientName: sub.patient_name,
+            messages: [
+              { text: `Submitted ${sub.image_count} images`, timestamp: new Date(sub.submitted_at) }
+            ],
+            timestamp: sub.submitted_at,
+            questionnaireAnswers: sub.questionnaire_answers,
+            imageQualityScore: sub.images?.[0]?.qualityScore || 0,
+            triageFlags: triageFlags,
+            status: sub.status,
+            submissionId: sub.id,
+            // Include images directly with this submission - NOW WITH PREDICTIONS
+            submissionImages: sub.images ? sub.images.map((img: any) => ({
+              fileName: img.fileName,
+              preview: img.preview,
+              qualityScore: img.qualityScore,
+              qualityFeedback: img.qualityFeedback,
+              prediction: img.prediction // Include AI predictions
+            })) : []
+          };
+        });
+
+        console.log('Transformed submissions:', transformedSubmissions);
         setSubmissions(transformedSubmissions);
+        setDebugInfo(prev => `${prev} | Found ${transformedSubmissions.length} submissions`);
 
         // Keep images array for the gallery view (all images combined)
         const allImages: MedicalImage[] = [];
@@ -305,6 +365,25 @@ export function PhysicianDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+      {/* Backend Health Status Panel */}
+      <div className={`p-3 ${backendHealth === 'healthy' ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200'}`}>
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${backendHealth === 'healthy' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <span className={`text-sm font-medium ${backendHealth === 'healthy' ? 'text-green-900' : 'text-red-900'}`}>
+              Backend: {backendHealth === 'healthy' ? 'Connected' : backendHealth === 'checking' ? 'Checking...' : 'Disconnected'}
+            </span>
+            {debugInfo && <span className="text-xs text-gray-600 ml-4">{debugInfo}</span>}
+          </div>
+          <button
+            onClick={checkBackendHealth}
+            className="text-xs px-3 py-1 bg-white rounded hover:bg-gray-100 border"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -471,33 +550,67 @@ export function PhysicianDashboard() {
                         <div className="px-4 pb-4 pt-2 bg-white border-t space-y-3">
                           {/* Decision Support Summary */}
                           {(latestSubmission?.imageQualityScore || hasTriageFlags) && (
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                                <TrendingUp className="w-4 h-4 text-blue-600" />
-                                Decision Support
+                            <div className={`border rounded-lg p-3 ${hasTriageFlags ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200'}`}>
+                              <h4 className={`text-sm font-medium mb-3 flex items-center gap-2 ${hasTriageFlags ? 'text-red-900' : 'text-blue-900'}`}>
+                                <TrendingUp className={`w-4 h-4 ${hasTriageFlags ? 'text-red-600' : 'text-blue-600'}`} />
+                                AI Analysis & Triage Flags
                               </h4>
-                              <div className="grid grid-cols-2 gap-2 text-sm">
-                                {latestSubmission?.imageQualityScore && (
-                                  <div>
-                                    <p className="text-gray-600">Image Quality</p>
-                                    <p className="font-medium">{latestSubmission.imageQualityScore}%</p>
-                                  </div>
-                                )}
-                                {hasTriageFlags && (
-                                  <div>
-                                    <p className="text-gray-600">Triage Flags</p>
-                                    <p className="font-medium text-orange-600">{latestSubmission.triageFlags.length} flag(s)</p>
-                                  </div>
-                                )}
-                              </div>
-                              {hasTriageFlags && (
-                                <div className="mt-2 space-y-1">
-                                  {latestSubmission.triageFlags.map((flag, idx) => (
-                                    <div key={idx} className="flex items-start gap-2 text-xs text-gray-700">
-                                      <AlertTriangle className="w-3 h-3 text-orange-500 flex-shrink-0 mt-0.5" />
-                                      <span>{flag}</span>
+                              
+                              {/* Image Quality */}
+                              {latestSubmission?.imageQualityScore && (
+                                <div className="mb-3 pb-3 border-b">
+                                  <p className="text-xs text-gray-600 mb-1">Image Quality Score</p>
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                                      <div 
+                                        className={`h-full rounded-full ${latestSubmission.imageQualityScore >= 75 ? 'bg-green-500' : 'bg-orange-500'}`}
+                                        style={{width: `${latestSubmission.imageQualityScore}%`}}
+                                      />
                                     </div>
+                                    <span className="text-sm font-medium">{latestSubmission.imageQualityScore}%</span>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* AI Predictions */}
+                              {latestSubmission?.submissionImages?.some(img => img.prediction) && (
+                                <div className="mb-3 pb-3 border-b space-y-2">
+                                  <p className="text-xs text-gray-600 font-medium">AI Predictions</p>
+                                  {latestSubmission.submissionImages.map((img, imgIdx) => (
+                                    img.prediction && (
+                                      <div key={imgIdx} className="text-xs bg-white rounded p-2 border">
+                                        <div className="flex justify-between items-start mb-1">
+                                          <span className="font-medium text-gray-700">{img.fileName}</span>
+                                          <span className={`px-2 py-0.5 rounded text-white text-xs font-bold ${
+                                            img.prediction.label === 'abnormal' ? 'bg-red-500' : 'bg-green-500'
+                                          }`}>
+                                            {img.prediction.label.toUpperCase()}
+                                          </span>
+                                        </div>
+                                        <div className="text-gray-600">
+                                          <div>Abnormality Risk: <span className={`font-bold ${
+                                            img.prediction.prob_abnormal > 0.7 ? 'text-red-600' : 
+                                            img.prediction.prob_abnormal > 0.5 ? 'text-orange-600' : 
+                                            'text-green-600'
+                                          }`}>{(img.prediction.prob_abnormal * 100).toFixed(1)}%</span></div>
+                                        </div>
+                                      </div>
+                                    )
                                   ))}
+                                </div>
+                              )}
+                              
+                              {/* Triage Flags */}
+                              {hasTriageFlags && (
+                                <div>
+                                  <p className="text-xs text-gray-600 font-medium mb-2">⚠️ Triage Flags ({latestSubmission.triageFlags.length})</p>
+                                  <div className="space-y-1">
+                                    {latestSubmission.triageFlags.map((flag, idx) => (
+                                      <div key={idx} className="flex items-start gap-2 text-xs p-2 bg-white rounded border-l-2 border-red-500">
+                                        <span className="font-medium text-gray-800">{flag}</span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -549,9 +662,9 @@ export function PhysicianDashboard() {
                                       <p className="text-sm font-medium text-gray-700">
                                         Submitted Images ({submission.submissionImages.length}):
                                       </p>
-                                      <div className="grid grid-cols-2 gap-2">
+                                      <div className="grid grid-cols-2 gap-3">
                                         {submission.submissionImages.map((img, imgIdx) => (
-                                          <div key={imgIdx} className="relative">
+                                          <div key={imgIdx} className="space-y-2">
                                             <div className="relative">
                                               <img 
                                                 src={img.preview} 
@@ -564,9 +677,22 @@ export function PhysicianDashboard() {
                                                 </div>
                                               )}
                                             </div>
-                                            <p className="text-xs text-gray-600 mt-1 truncate">{img.fileName}</p>
-                                            {img.qualityFeedback && (
-                                              <p className="text-xs text-gray-500">{img.qualityFeedback}</p>
+                                            <div>
+                                              <p className="text-xs text-gray-600 truncate">{img.fileName}</p>
+                                              {img.qualityFeedback && (
+                                                <p className="text-xs text-gray-500">{img.qualityFeedback}</p>
+                                              )}
+                                            </div>
+                                            {img.prediction && (
+                                              <div className="p-2 bg-blue-50 rounded border border-blue-200 space-y-1">
+                                                <div className="font-medium text-xs text-blue-900">AI Analysis:</div>
+                                                <div className="text-xs">
+                                                  <div><span className="text-gray-700">Classification:</span> <span className="font-semibold">{img.prediction.label}</span></div>
+                                                  <div className={`font-semibold ${img.prediction.prob_abnormal > 0.5 ? 'text-red-600' : 'text-green-600'}`}>
+                                                    Abnormal Risk: {(img.prediction.prob_abnormal * 100).toFixed(1)}%
+                                                  </div>
+                                                </div>
+                                              </div>
                                             )}
                                           </div>
                                         ))}
@@ -642,9 +768,9 @@ export function PhysicianDashboard() {
                                       <p className="text-sm font-medium text-gray-700">
                                         Images ({submission.submissionImages.length}):
                                       </p>
-                                      <div className="grid grid-cols-2 gap-2">
+                                      <div className="grid grid-cols-2 gap-3">
                                         {submission.submissionImages.slice(0, 2).map((img, imgIdx) => (
-                                          <div key={imgIdx} className="relative">
+                                          <div key={imgIdx} className="space-y-2">
                                             <div className="relative">
                                               <img 
                                                 src={img.preview} 
@@ -657,6 +783,13 @@ export function PhysicianDashboard() {
                                                 </div>
                                               )}
                                             </div>
+                                            {img.prediction && (
+                                              <div className="text-xs space-y-1 p-2 bg-gray-50 rounded border">
+                                                <div className="font-medium">AI Prediction:</div>
+                                                <div><span className="text-gray-600">Label:</span> <span className="font-semibold">{img.prediction.label}</span></div>
+                                                <div><span className="text-gray-600">Abnormal Prob:</span> <span className={`font-semibold ${img.prediction.prob_abnormal > 0.5 ? 'text-red-600' : 'text-green-600'}`}>{(img.prediction.prob_abnormal * 100).toFixed(1)}%</span></div>
+                                              </div>
+                                            )}
                                           </div>
                                         ))}
                                       </div>
