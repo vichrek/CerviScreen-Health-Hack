@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserCircle, Stethoscope } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { CerviScreenLogo } from '@/app/components/CerviScreenLogo';
 
 export function Login() {
   const [selectedRole, setSelectedRole] = useState<'patient' | 'physician' | null>(null);
@@ -141,11 +142,10 @@ export function Login() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full mb-4">
-            <Stethoscope className="w-8 h-8 text-white" />
+          <div className="flex justify-center mb-4">
+            <CerviScreenLogo className="w-full max-w-sm h-auto" />
           </div>
-          <h1 className="text-3xl mb-2">CerviScreen</h1>
-          <p className="text-gray-600">At-Home Cervical Screening Platform</p>
+          <p className="text-gray-600 mt-2">At-Home Cervical Screening Platform</p>
         </div>
 
         <form onSubmit={isSignup ? handleSignup : handleLogin} className="space-y-6">

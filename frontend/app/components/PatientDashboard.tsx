@@ -6,6 +6,7 @@ import { ConsentEligibility } from '@/app/components/ConsentEligibility';
 import { DevicePairing } from '@/app/components/DevicePairing';
 import { StructuredChatbot } from '@/app/components/StructuredChatbot';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
+import { CerviScreenIcon } from '@/app/components/CerviScreenLogo';
 import { toast } from 'sonner';
 
 interface UploadedImage {
@@ -630,9 +631,12 @@ export function PatientDashboard() {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl">CerviScreen Patient Portal</h1>
-              <p className="text-sm text-gray-600">Welcome, {userName}</p>
+            <div className="flex items-center gap-3">
+              <CerviScreenIcon className="w-10 h-10" />
+              <div>
+                <h1 className="text-2xl">CervicalScreen Patient Portal</h1>
+                <p className="text-sm text-gray-600">Welcome, {userName}</p>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               {/* Notification Bell */}
@@ -896,7 +900,7 @@ export function PatientDashboard() {
             <div>
               <p className="font-medium mb-1">📱 Technical Support</p>
               <p className="text-gray-600">Call: 1-800-SCREEN</p>
-              <p className="text-gray-600">Email: support@cerviscreen.com</p>
+              <p className="text-gray-600">Email: support@cervicalscreen.com</p>
             </div>
             <div>
               <p className="font-medium mb-1">🏥 Clinical Questions</p>
